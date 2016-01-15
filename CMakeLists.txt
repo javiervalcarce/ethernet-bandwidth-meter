@@ -10,17 +10,17 @@
 # make
 ########################################################################################################################
 
-PROJECT(libbandwithmeter)
+PROJECT(libteletraffic)
 CMAKE_MINIMUM_REQUIRED (VERSION 2.8.6)
 set (CMAKE_LEGACY_CYGWIN_WIN32 0)
 
-set (LIBBANDWIDTHMETER_VERSION_MAJOR 0)
-set (LIBBANDWIDTHMETER_VERSION_MINOR 1)
-set (LIBBANDWIDTHMETER_VERSION_MICRO 0)
-set (LIBBANDWIDTHMETER_VERSION_STRING ${LIBBANDWIDTHMETER_VERSION_MAJOR}.${LIBBANDWIDTHMETER_VERSION_MINOR}.${LIBBANDWIDTHMETER_VERSION_MICRO})
+set (LIBTELETRAFFIC_VERSION_MAJOR 0)
+set (LIBTELETRAFFIC_VERSION_MINOR 1)
+set (LIBTELETRAFFIC_VERSION_MICRO 0)
+set (LIBTELETRAFFIC_VERSION_STRING ${LIBTELETRAFFIC_VERSION_MAJOR}.${LIBTELETRAFFIC_VERSION_MINOR}.${LIBTELETRAFFIC_VERSION_MICRO})
 
-set (libbandwidthmeter_SRCS src/send.cpp src/recv.cpp)
-set (test_bwmeter_SRCS src/test_bwmeter.cpp)
+set (libteletraffic_SRCS src/test_teletraffic.cpp)
+set (test_teletraffic_SRCS src/test_teletraffic.cpp)
 
 set (CMAKE_VERBOSE_MAKEFILE on)
 
@@ -30,8 +30,8 @@ include_directories (src/include)
 # opciones de compilación (CFLAGS)
 add_definitions ("-Wall -g")
 
-add_library(bandwidthmeter SHARED ${libbandwidthmeter_SRCS})
-set_target_properties(bandwidthmeter PROPERTIES VERSION ${LIBBANDWIDTHMETER_VERSION_STRING})
+add_library(teletraffic SHARED ${libteletraffic_SRCS})
+set_target_properties(bandwidthmeter PROPERTIES VERSION ${LIBTELETRAFFIC_VERSION_STRING})
 
-add_executable(test_bwmeter ${test_bwmeter_SRCS})
-target_link_libraries(test_bwmeter bandwidthmeter m pthread)
+add_executable(test_teletraffic ${test_bwmeter_SRCS})
+target_link_libraries(test_teletraffic teletraffic pcap m pthread)
