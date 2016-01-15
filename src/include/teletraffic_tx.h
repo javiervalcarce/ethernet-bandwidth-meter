@@ -21,19 +21,19 @@ namespace teletraffic {
       };
       
       
-class TeletrafficRx {
+class TeletrafficTx {
 public:
 
       
       /**
        * Constructor
        */
-      TeletrafficRx(std::string eth_interface);
+      TeletrafficTx(std::string eth_interface);
       
       /**
        * Destructor
        */
-      TeletrafficRx();
+      ~TeletrafficTx();
 
       /**
        *
@@ -50,15 +50,12 @@ public:
        */
       int Stop();
 
-      /**
-       */
-      int sd();
       
 private:
       pcap_t* pdev_;
       
       static
-      void* ThreadFn(TeletrafficRx* obj);
+      void* ThreadFn(TeletrafficTx* obj);
       void* ThreadFn();
 };
 

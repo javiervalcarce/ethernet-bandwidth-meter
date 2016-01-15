@@ -1,6 +1,6 @@
 // Hi Emacs, this is -*- coding: utf-8; mode: c++; tab-width: 6; indent-tabs-mode: nil; c-basic-offset: 6 -*-
-#ifndef TELETRAFFIC_TELETRAFFIC_TX_
-#define TELETRAFFIC_TELETRAFFIC_TX_
+#ifndef TELETRAFFIC_TELETRAFFIC_RX_
+#define TELETRAFFIC_TELETRAFFIC_RX_
 
 #include <pthread.h>
 #include <pcap/pcap.h>
@@ -20,19 +20,19 @@ namespace teletraffic {
             char source_mac[6];
       };
       
-class TeletrafficTx {
+class TeletrafficRx {
 public:
 
       
       /**
        * Constructor
        */
-      TeletrafficTx();
+      TeletrafficRx(std::string eth);
       
       /**
        * Destructor
        */
-      TeletrafficTx();
+      ~TeletrafficRx();
 
       /**
        *
@@ -57,11 +57,11 @@ private:
       pcap_t* pdev_;
       
       static
-      void* ThreadFn(TeletrafficTx* obj);
+      void* ThreadFn(TeletrafficRx* obj);
       void* ThreadFn();
 };
 
 }
 
-#endif // TELETRAFFIC_TELETRAFFIC_TX_
+#endif // TELETRAFFIC_TELETRAFFIC_RX_
 
