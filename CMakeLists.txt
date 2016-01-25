@@ -19,7 +19,7 @@ set (LIBTELETRAFFIC_VERSION_MINOR 1)
 set (LIBTELETRAFFIC_VERSION_MICRO 0)
 set (LIBTELETRAFFIC_VERSION_STRING ${LIBTELETRAFFIC_VERSION_MAJOR}.${LIBTELETRAFFIC_VERSION_MINOR}.${LIBTELETRAFFIC_VERSION_MICRO})
 
-set (libteletraffic_SRCS src/teletraffic_tx.cpp src/teletraffic_rx.cpp)
+set (libteletraffic_SRCS src/stopwatch.cpp src/teletraffic_tx.cpp src/teletraffic_rx.cpp)
 set (test_teletraffic_SRCS src/test_teletraffic.cpp)
 
 set (CMAKE_VERBOSE_MAKEFILE on)
