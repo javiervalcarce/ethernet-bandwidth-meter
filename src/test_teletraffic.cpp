@@ -78,7 +78,7 @@ void Usage() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int TxMode() {
 
-      tx = new TeletrafficTx(interface);
+      tx = new TeletrafficTx(interface, 0xFF30);
       
       if (tx->Init() != 0) {
             printf("Initializing error. Are you root? Execute this program as root or with sudo.\n");

@@ -19,10 +19,11 @@ const int PACKET_SIZE = 1024;
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-TeletrafficTx::TeletrafficTx(std::string interface) {
+TeletrafficTx::TeletrafficTx(std::string interface, uint16_t protocol_id) {
 
       interface_ = interface;
-
+      protocol_id_ = protocol_id;
+      
       initialized_ = false;
       thread_exit_ = false;
 
@@ -31,8 +32,6 @@ TeletrafficTx::TeletrafficTx(std::string interface) {
 
       pthread_attr_init(&thread_attr_);
       pthread_attr_setdetachstate(&thread_attr_, PTHREAD_CREATE_JOINABLE);
-
-      
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -100,23 +99,22 @@ void* TeletrafficTx::ThreadFn() {
  */
       memset(hdr.ether_dhost, 0xFF, 6);
       memset(hdr.ether_shost, 0xA0, 6);
-      hdr.ether_type = htons(0xFF30);
+      hdr.ether_type = htons(protocol_id_);
 
       memcpy(pkt_sent_, &hdr, sizeof(struct ether_header));
 
       char* payload = pkt_sent_ + sizeof(struct ether_header);
 
-      payload[0]  = 'S';
-      payload[1]  = 'E';
-      payload[2]  = 'P';
-      payload[3]  = 'S';
-      payload[4]  = 'A';
-      payload[5]  = '#';
-      payload[6]  = '#';
-      payload[7]  = '#';
-
-      payload[8]  = 0x00; // Número de secuencia (entero de 64 bits sin signo = uint64_t).
-      payload[9]  = 0x00;
+      payload[ 0]  = 'S';
+      payload[ 1]  = 'E';
+      payload[ 2]  = 'P';
+      payload[ 3]  = 'S';
+      payload[ 4]  = 'A';
+      payload[ 5]  = '#';
+      payload[ 6]  = '#';
+      payload[ 7]  = '#';
+      payload[ 8] = 0x00; // Número de secuencia (entero de 64 bits sin signo = uint64_t).
+      payload[ 9] = 0x00;
       payload[10] = 0x00;
       payload[11] = 0x00;
       payload[12] = 0x00;

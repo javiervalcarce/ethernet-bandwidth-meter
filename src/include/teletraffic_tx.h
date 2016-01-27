@@ -27,40 +27,33 @@ public:
 
       
       /**
-       * Constructor
+       * Constructor.
+       * 
+       * @param interface Network interface used to transmit packets, every packet will [have protocol_id] in their
+       * protocol field.
+       *
+       * @param protocol_id Protocol id for each packet.
        */
-      TeletrafficTx(std::string interface);
+      TeletrafficTx(std::string interface, uint16_t protocol_id);
       
       /**
-       * Destructor
+       * Destructor.
        */
       ~TeletrafficTx();
 
       /**
+       * Initialization.
        */
       int Init();
       
-      /**
-       *
-       */
-      int Run();
-      
-      /**
-       *
-       */
-      bool IsRunning();
-      
-      /**
-       *
-       */
-      int Stop();
-
       
 private:
 
       std::string interface_;
+      uint16_t protocol_id_;
 
       pcap_t* txdev_;
+      
       char* errbuf_;
       char* pkt_sent_;
       Stopwatch watch_;
