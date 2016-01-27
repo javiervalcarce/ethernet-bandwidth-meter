@@ -1,3 +1,4 @@
+// Hi Emacs, this is -*- coding: utf-8; mode: c++; tab-width: 6; indent-tabs-mode: nil; c-basic-offset: 6 -*-
 #include "teletraffic_tx.h"
 #include <unistd.h>
 #include <cstdlib>
@@ -55,12 +56,12 @@ int TeletrafficTx::Init() {
             return 1;
       }
 
-
-      // Make sure we're capturing on an Ethernet device [2] 
-      // No, es contraproducente.
-      //if (pcap_datalink(txdev_) != DLT_EN10MB) {
-      //     return 1;
-      //}
+      // Make sure we're capturing on an Ethernet device [2]
+      // Warning: in MacOSX and BSD the loopack interface does not have Ethernet headers.
+      if (pcap_datalink(txdev_) != DLT_EN10MB) {
+            printf("Not IEEE 802.3 interface\n");
+            return 1;
+      }
 
       // Creación del hilo que lee y procesa las muestras de audio.
       int r;
@@ -104,28 +105,33 @@ void* TeletrafficTx::ThreadFn() {
       memcpy(pkt_sent_, &hdr, sizeof(struct ether_header));
 
       char* payload = pkt_sent_ + sizeof(struct ether_header);
-      
-      payload[0] = 'S';
-      payload[1] = 'E';
-      payload[2] = 'P';
-      payload[3] = 'S';
-      payload[4] = 'A';
-      payload[5] = '#';
 
-      payload[6] = 0x00;
-      payload[7] = 0x00;
-      payload[8] = 0x00;
-      payload[9] = 0x00;
+      payload[0]  = 'S';
+      payload[1]  = 'E';
+      payload[2]  = 'P';
+      payload[3]  = 'S';
+      payload[4]  = 'A';
+      payload[5]  = '#';
+      payload[6]  = '#';
+      payload[7]  = '#';
 
-      uint32_t* pkt_count_p = (uint32_t*) &payload[6];
+      payload[8]  = 0x00; // Número de secuencia (entero de 64 bits sin signo = uint64_t).
+      payload[9]  = 0x00;
+      payload[10] = 0x00;
+      payload[11] = 0x00;
+      payload[12] = 0x00;
+      payload[13] = 0x00;
+      payload[14] = 0x00;
+      payload[15] = 0x00; // Fin del número de secuencia.
 
       // Genero un vector de números pseudoaleatorios entre 0 y 255 ambos inclusive a partir del byte nº 10
-      for (int i = 10; i < PACKET_SIZE; i++) {
+      for (int i = 16; i < PACKET_SIZE; i++) {
             payload[i] = rand() % 256;
       }
 
-      int pkt_count = 0;
-      int error_count = 0;
+      uint64_t  pkt_count = 0;
+      uint64_t* pkt_count_p = (uint64_t*) &payload[8];
+      uint64_t  error_count = 0;
 
       watch_.Reset();
       watch_.Start();
@@ -136,21 +142,21 @@ void* TeletrafficTx::ThreadFn() {
                   break;
             }
 
-            // Envío una trama ethernet
+            // Envío una trama ethernet incrementando el número de secuencia.
             *pkt_count_p = pkt_count;
 
             int nb = pcap_inject(txdev_, pkt_sent_, PACKET_SIZE);
             if (nb != PACKET_SIZE) { 
                   error_count++;
-                  printf("er\n");
-                  usleep(100000); // 0,1 segundos
+                  printf("Error\n");
+                  usleep(200000); // 0,2 segundos - apaciguamiento de la generación de errores
             }
 
             pkt_count++;
-            if (pkt_count % 1000 == 0) {
-                  printf("pkts = %d\n", pkt_count);
+            if ((pkt_count % 10000) == 0) {
+                  printf("pkts = %llu\n", pkt_count);
             }
-
+            
       }
 
       return NULL;

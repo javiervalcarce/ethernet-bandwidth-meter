@@ -50,15 +50,17 @@ int main(int argc, char** argv) {
 
       printf("Using interface %s\n", interface.c_str());
       
+      int err;
+
       if (mode == "tx") {
-            TxMode();
+            err = TxMode();
       } else if (mode == "rx") {
-            RxMode();
+            err = RxMode();
       } else {
-            return 1;
+            err = 1;
       }
       
-      return 0;
+      return err;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -79,12 +81,15 @@ int TxMode() {
       tx = new TeletrafficTx(interface);
       
       if (tx->Init() != 0) {
-            printf("Error initializing tx\n");
+            printf("Initializing error. Are you root? Execute this program as root or with sudo.\n");
             return 1;
       }
 
       while (1) {
-            usleep(100000); // 0,1 ms
+
+            
+            
+            usleep(500000); // 0,5 s
       }
 
 }
@@ -95,12 +100,26 @@ int RxMode() {
       rx = new TeletrafficRx(interface);
 
       if (rx->Init() != 0) {
-            printf("Error initializing rx\n");
+            printf("Initializing error. Are you root? Execute this program as root or with sudo.\n");
             return 1;
       }
       
+
       while (1) {
-            usleep(100000); // 0,1 ms
+
+            const Statistics& s = rx->Stats();                        
+            printf("rx=%llu, lost=%llu 1s=(%11.2f pkt/s, %8.2f Mbps) 4s=(%11.2f pkt/s, %8.2f Mbps) 8s=(%11.2f pkt/s, %8.2f Mbps)\n",
+                   s.recv_packet_count,
+                   s.lost_packet_count,
+                   s.rate_1s_pkps,
+                   s.rate_1s_Mbps, 
+                   s.rate_4s_pkps,
+                   s.rate_4s_Mbps,
+                   s.rate_8s_pkps,
+                   s.rate_8s_Mbps
+                   );
+            
+            usleep(500000); // 0.5 s
       }
 
 }
