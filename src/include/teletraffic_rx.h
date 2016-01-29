@@ -23,8 +23,10 @@ namespace teletraffic {
       /**
        * Statistics about received packets.
        */
-      struct Statistics {
-            Statistics() { Reset(); }
+      struct RxStatistics {
+            RxStatistics() { 
+                  Reset(); 
+            }
             void Reset() {
                   rate_1s_Mbps = 0.0;
                   rate_1s_pkps = 0.0;
@@ -37,28 +39,38 @@ namespace teletraffic {
                   last_packet_timestamp = 0;
             }
 
-            // Tasa instantanea (periodo de integración 1 segundo)
+            // Network interface to sniff
+            std::string interface;
+
+            // Protocol ID used to filter incoming packets (used in PCAP filter expresion eth proto %d)
+            uint16_t packet_protocol_id;
+
+            // Data rate in packets/seconds calculated over a time window of 1 second
             double rate_1s_Mbps;
+            // Data rate in Mbps calculated over a time window of 1 second
             double rate_1s_pkps;
             
-            // Tasa instantanea (periodo de integración 4 segundo)
+            // Data rate in packets/seconds calculated over a time window of 4 seconds
             double rate_4s_Mbps;
+            // Data rate in Mbps calculated over a time window of 4 seconds
             double rate_4s_pkps;
 
-            // Tasa instantanea (periodo de integración 4 segundo)
+            // Data rate in packets/seconds calculated over a time window of 8 seconds
             double rate_8s_Mbps;
+            // Data rate in Mbps calculated over a time window of 8 seconds
             double rate_8s_pkps;
                         
-            // Contador total de paquetes recibidos.
+            // Total received packet counter
             uint64_t recv_packet_count;
 
-            // Número de paquetes perdidos (saltos de secuencia).
+            // Lost packet counter
             uint64_t lost_packet_count;
 
-            // Propiedades del último paquete recibido.
+            // Some properties of the last received packet
             uint16_t last_packet_protocol;
             uint16_t last_packet_size;
             uint64_t last_packet_timestamp;
+
       };
 
 
@@ -71,7 +83,7 @@ namespace teletraffic {
             /**
              * Constructor
              */
-            TeletrafficRx(std::string interface);
+            TeletrafficRx(std::string interface, uint16_t protocol_id);
       
             /**
              * Destructor
@@ -88,7 +100,7 @@ namespace teletraffic {
             /**
              * Devuelve un puntero a la estructura de datos que contiene las estadísticas recopiladas.
              */
-            const Statistics& Stats();
+            const RxStatistics& Stats();
 
             const std::string& ErrorDescription() const { return last_error_; }
 
@@ -96,7 +108,6 @@ namespace teletraffic {
 
             pthread_mutex_t lock_;
 
-            std::string interface_;
             bool initialized_;
             bool exit_thread_;
             pcap_t* rxdev_;
@@ -107,8 +118,8 @@ namespace teletraffic {
             pthread_t thread_;
             pthread_attr_t thread_attr_;
 
-            Statistics st_;
-            Statistics st_copy_;
+            RxStatistics st_;
+            RxStatistics st_copy_;
             
             uint8_t* pkt_recv_;
             uint64_t elapsed_;

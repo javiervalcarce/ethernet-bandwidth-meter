@@ -21,9 +21,13 @@ const int PACKET_SIZE = 1024;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 TeletrafficTx::TeletrafficTx(std::string interface, uint16_t protocol_id) {
 
-      interface_ = interface;
-      protocol_id_ = protocol_id;
-      
+      pthread_mutex_init(&lock_, NULL);
+
+      st_.interface = interface;
+      st_.sent_packet_count = 0;
+      st_.packet_protocol_id = protocol_id;
+      st_.packet_size = PACKET_SIZE;
+
       initialized_ = false;
       thread_exit_ = false;
 
@@ -47,9 +51,9 @@ int TeletrafficTx::Init() {
       assert(initialized_ == false);
 
       printf("sizeof(errbuf_)=%d\n", PCAP_ERRBUF_SIZE);
-      printf("interface = %s\n", interface_.c_str());
+      printf("interface = %s\n", st_.interface.c_str());
       errbuf_[0] = '\0';
-      txdev_ = pcap_open_live(interface_.c_str(), PACKET_SIZE, 0, 0, errbuf_);
+      txdev_ = pcap_open_live(st_.interface.c_str(), PACKET_SIZE, 0, 0, errbuf_);
       if (txdev_ == NULL) {
             printf("txdev_ NULL (%s)\n", errbuf_);
             return 1;
@@ -68,11 +72,24 @@ int TeletrafficTx::Init() {
       if (r != 0) {
             return 1;
       }
-
+      initialized_ = true;
       return 0;
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+const TxStatistics& TeletrafficTx::Stats() {
+      assert(initialized_ == true);
 
+      // La estructura st está siendo constantemente actualizada por el hilo interno ThreadFn, para avitar condiciones
+      // de carrera que den lugar la lecturas incorrectas de los valores por parte de aplicación garantizo la exlusión
+      // mutua y hago una copia de la variable, esto es razonablemente eficiente ya que no pesa mucho (~70 bytes)
+      pthread_mutex_lock(&lock_);
+      st_copy_ = st_;
+      pthread_mutex_unlock(&lock_);
+
+      return st_copy_;
+}
+      
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void* TeletrafficTx::ThreadFn(void* obj) {
       TeletrafficTx* o = (TeletrafficTx*) obj;
@@ -99,7 +116,7 @@ void* TeletrafficTx::ThreadFn() {
  */
       memset(hdr.ether_dhost, 0xFF, 6);
       memset(hdr.ether_shost, 0xA0, 6);
-      hdr.ether_type = htons(protocol_id_);
+      hdr.ether_type = htons(st_.packet_protocol_id);
 
       memcpy(pkt_sent_, &hdr, sizeof(struct ether_header));
 
@@ -146,15 +163,15 @@ void* TeletrafficTx::ThreadFn() {
             int nb = pcap_inject(txdev_, pkt_sent_, PACKET_SIZE);
             if (nb != PACKET_SIZE) { 
                   error_count++;
-                  printf("Error\n");
                   usleep(200000); // 0,2 segundos - apaciguamiento de la generación de errores
             }
 
             pkt_count++;
-            if ((pkt_count % 10000) == 0) {
-                  printf("pkts = %llu\n", pkt_count);
-            }
             
+            pthread_mutex_lock(&lock_);
+            st_.sent_packet_count = pkt_count;
+            pthread_mutex_unlock(&lock_);
+           
       }
 
       return NULL;
