@@ -15,11 +15,11 @@ CMAKE_MINIMUM_REQUIRED (VERSION 2.8.6)
 set (CMAKE_LEGACY_CYGWIN_WIN32 0)
 
 set (LIBTELETRAFFIC_VERSION_MAJOR 0)
-set (LIBTELETRAFFIC_VERSION_MINOR 1)
-set (LIBTELETRAFFIC_VERSION_MICRO 0)
+set (LIBTELETRAFFIC_VERSION_MINOR 4)
+set (LIBTELETRAFFIC_VERSION_MICRO 1)
 set (LIBTELETRAFFIC_VERSION_STRING ${LIBTELETRAFFIC_VERSION_MAJOR}.${LIBTELETRAFFIC_VERSION_MINOR}.${LIBTELETRAFFIC_VERSION_MICRO})
 
-set (libteletraffic_SRCS src/hexdump.cpp src/stopwatch.cpp src/teletraffic_tx.cpp src/teletraffic_rx.cpp)
+set (libteletraffic_SRCS src/hexdump.cpp src/stopwatch.cpp src/teletraffic_tx.cpp src/netif_table.cpp src/teletraffic_rx.cpp src/utils.cpp)
 set (test_teletraffic_SRCS src/test_teletraffic.cpp)
 
 set (CMAKE_VERBOSE_MAKEFILE on)
@@ -34,4 +34,4 @@ add_library(teletraffic SHARED ${libteletraffic_SRCS})
 set_target_properties(teletraffic PROPERTIES VERSION ${LIBTELETRAFFIC_VERSION_STRING})
 
 add_executable(test_teletraffic ${test_teletraffic_SRCS})
-target_link_libraries(test_teletraffic teletraffic pcap m pthread)
+target_link_libraries(test_teletraffic teletraffic pcap m pthread rt)

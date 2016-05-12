@@ -15,6 +15,7 @@ using namespace teletraffic;
 std::string interface;
 std::string mode;
 std::string destination_mac;
+std::string source_mac;
 std::string protocol_id_str;
 int         protocol_id;
 
@@ -48,6 +49,8 @@ int main(int argc, char** argv) {
       mode            = argv[2] != NULL ? argv[2] : "eth0";
       protocol_id_str = argv[3] != NULL ? argv[3] : "";
       destination_mac = argv[4] != NULL ? argv[4] : "FF:FF:FF:FF:FF:FF";
+      source_mac      = argv[5] != NULL ? argv[5] : "00:00:00:00:00:00";
+
 
       char* endp;
       protocol_id = strtoul(protocol_id_str.c_str(), &endp, 0);
@@ -56,7 +59,7 @@ int main(int argc, char** argv) {
             return 1;
       }
 
-      printf("Using interface %s\n", interface.c_str());
+      
       
       int err;
       if (mode == "tx") {
@@ -75,11 +78,17 @@ void Usage() {
       printf("Usage: ./test_teletraffic <network-if> <tx|rx> <more-params>\n");
       printf("\n");
       printf("Examples:\n");
-      printf("tx mode:  ./test_teletraffic <network-if> tx <protocol-id> <destination-mac>\n");
-      printf("          ./test_teletraffic eth0 tx 0xFF30 FF:FF:FF:FF:FF:FF\n");
+      printf("tx mode:  test_teletraffic <network-if> tx <protocol-id> [<destination-mac>] [<source-mac>]\n");
+      printf("               <destination-mac> is optional, if not specified the broadcast mac address will be used\n");
+      printf("               <source-mac> is optional, if not specified the <network-if> mac address will be used\n");
       printf("\n");
-      printf("rx mode:  ./test_teletraffic <network-if> rx <protocol-id>\n");
-      printf("          ./test_teletraffic eth0 rx 0xFF30\n");
+      printf("               Example:\n");
+      printf("               ./test_teletraffic eth0 tx 0xFF30 FF:FF:FF:FF:FF:FF 00:00:00:00:00:00\n");
+      printf("\n");
+      printf("rx mode:  test_teletraffic <network-if> rx <protocol-id>\n");
+      printf("\n");
+      printf("               Example:\n");
+      printf("               ./test_teletraffic eth0 rx 0xFF30\n");
       printf("\n");
 }
 
@@ -87,18 +96,29 @@ void Usage() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int TxMode() {
 
-      tx = new TeletrafficTx(interface, protocol_id);
+      uint8_t dst[6];
+      uint8_t src[6];
+
+      // Conversión de la MAC en formato cadena en array de 6 bytes
+      MacAddressAsciiz2Binary(destination_mac.c_str(), dst);
+      MacAddressAsciiz2Binary(source_mac.c_str(), src);
+      
+      if (source_mac != "00:00:00:00:00:00") {
+            tx = new TeletrafficTx(interface, protocol_id, dst, src);
+      } else {
+            tx = new TeletrafficTx(interface, protocol_id, dst, NULL);
+      }
+      
       if (tx->Init() != 0) {
             printf("Initializing error. Are you root? Execute this program as root or with sudo.\n");
             return 1;
       }
 
-      printf("Initialized\n");
+      printf("Initialized.\n");
 
       while (1) {
-            
             const TxStatistics& s = tx->Stats();                        
-            printf("sent pkts=%llu\n", s.sent_packet_count);
+            printf("Number of packets sent: %12llu packets\n", s.sent_packet_count);
             usleep(500000); // 0,5 s
       }
 
@@ -116,21 +136,10 @@ int RxMode() {
       while (1) {
 
             const RxStatistics& s = rx->Stats();                        
-            /*
-            printf("rx=%llu, lost=%llu 1s=(%9.2f pkt/s, %7.2f Mbps) 4s=(%9.2f pkt/s, %7.2f Mbps) 8s=(%9.2f pkt/s, %7.2f Mbps)\n",
+            //printf("rx=%010llu, lost=%010llu 1s=%7.2f Mbps, 4s=%7.2f Mbps, 8s=%7.2f Mbps\n",
+            printf("rx=%010llu, 1s=%7.2f Mbps, 4s=%7.2f Mbps, 8s=%7.2f Mbps\n",
                    s.recv_packet_count,
-                   s.lost_packet_count,
-                   s.rate_1s_pkps,
-                   s.rate_1s_Mbps, 
-                   s.rate_4s_pkps,
-                   s.rate_4s_Mbps,
-                   s.rate_8s_pkps,
-                   s.rate_8s_Mbps
-                   );
-            */
-            printf("rx=%010llu, lost=%010llu 1s=%7.2f Mbps, 4s=%7.2f Mbps, 8s=%7.2f Mbps\n",
-                   s.recv_packet_count,
-                   s.lost_packet_count,
+                   //s.lost_packet_count,
                    s.rate_1s_Mbps, 
                    s.rate_4s_Mbps,
                    s.rate_8s_Mbps

@@ -1,5 +1,4 @@
 // Hi Emacs, this is -*- coding: utf-8; mode: c++; tab-width: 6; indent-tabs-mode: nil; c-basic-offset: 6 -*-
-
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -7,7 +6,9 @@
 #include <sstream>
 #include <string>
 
+#include <arpa/inet.h>
 #include <pcap/pcap.h>
+
 
 #include "teletraffic_rx.h"
 #include "stopwatch.h"
@@ -16,6 +17,7 @@
 using namespace teletraffic;
 
 const int PACKET_SIZE = 1024;
+static pthread_mutex_t s_lock = PTHREAD_MUTEX_INITIALIZER;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 TeletrafficRx::TeletrafficRx(std::string interface, uint16_t protocol_id) {
@@ -30,6 +32,7 @@ TeletrafficRx::TeletrafficRx(std::string interface, uint16_t protocol_id) {
       rxdev_ = NULL;
       
       errbuf_ = new char[PCAP_ERRBUF_SIZE];
+      errbuf_[0]='\0';
 
       pthread_attr_init(&thread_attr_);
       pthread_attr_setdetachstate(&thread_attr_, PTHREAD_CREATE_JOINABLE);    
@@ -37,27 +40,45 @@ TeletrafficRx::TeletrafficRx(std::string interface, uint16_t protocol_id) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 TeletrafficRx::~TeletrafficRx() {
+
       if (initialized_ == true) {
+            // El hilo de tx fue creado, le mandamos parar y esperamos su salida.
             exit_thread_ = true;
-            //pthread_cancel(thread_);  
             pthread_join(thread_, NULL);
+      }
+
+      if (rxdev_ != NULL) {
+            pcap_close(rxdev_);
       }
    
       delete[] errbuf_;
+
+      initialized_ = false;
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int TeletrafficRx::Init() {
       assert(initialized_ == false);
-  
-      errbuf_[0]='\0';
 
       bpf_u_int32 mask;		/* The netmask of our sniffing device */
       bpf_u_int32 net;		/* The IP of our sniffing device */
 
+
+      // La interfaz de red podía no estar activada (UP)
+      char cmd[64];
+      snprintf(cmd, sizeof(cmd), "ifconfig %s up", st_.interface.c_str());
+      if (system(cmd) != 0) {
+            printf("TeletrafficRx: Error executing this command: %s\n", cmd);
+            return 1;
+      }
+
+
+      assert(st_.interface.length() > 0);
+      assert(st_.packet_protocol_id != 0);
+
       if (pcap_lookupnet(st_.interface.c_str(), &net, &mask, errbuf_) == -1) {
-            printf("Can't get netmask for device %s\n", st_.interface.c_str());
+            //printf("Can't get netmask for device %s\n", st_.interface.c_str());
             mask = 0;
             net = 0;
       }
@@ -65,20 +86,20 @@ int TeletrafficRx::Init() {
       // read timeout = 10 ms
       rxdev_ = pcap_open_live(st_.interface.c_str(), 32/*64 PACKET_SIZE*/, 1/*promisc*/, 10/*read timeout*/, errbuf_); 
       if (rxdev_ == NULL) {
-            printf("rxdev_==NULL\n");
+            printf("TeletrafficRx: rxdev_ is NULL\n");
             return 1;
       }
 
       // Make sure we're capturing on an Ethernet device [2]
       // Warning: in MacOSX and BSD the loopack interface does not have Ethernet headers.
       if (pcap_datalink(rxdev_) != DLT_EN10MB) {
-            printf("Not a IEEE 802.3 inteface\n");
+            printf("TeletrafficRx: Not a IEEE 802.3 inteface\n");
             return 1;
       }
 
       // Sniff only INCOMING (received) packets.
       if (pcap_setdirection(rxdev_, PCAP_D_IN) == -1) {
-            printf("pcap_setdirection\n");
+            printf("TeletrafficRx: pcap_setdirection() error\n");
             return 1;
       }
 
@@ -88,22 +109,27 @@ int TeletrafficRx::Init() {
       char filter_exp[80];    
       snprintf(filter_exp, sizeof(filter_exp), "ether proto %d", st_.packet_protocol_id);
 
-
+      //
+      // Cuiado aquí: pcap_compile() **NO** es thread-safe por lo tanto debemos meterla en una región crítica.
+      //
+      pthread_mutex_lock(&s_lock);
       if (pcap_compile(rxdev_, &fp, filter_exp, 0, net) == -1) {
-            fprintf(stderr, "Couldn't parse filter %s: %s\n", filter_exp, pcap_geterr(rxdev_));
+            printf("TeletrafficRx: Couldn't parse filter %s: %s\n", filter_exp, pcap_geterr(rxdev_));
             return 1;
       }
-      if (pcap_setfilter(rxdev_, &fp) == -1) {
-            fprintf(stderr, "Couldn't install filter %s: %s\n", filter_exp, pcap_geterr(rxdev_));
-            return 1;
-      }
+      pthread_mutex_unlock(&s_lock);
 
+      if (pcap_setfilter(rxdev_, &fp) == -1) {
+            printf("TeletrafficRx: Couldn't install filter %s: %s\n", filter_exp, pcap_geterr(rxdev_));
+            return 1;
+      }
 
       int r;
       r = pthread_create(&thread_, &thread_attr_, TeletrafficRx::ThreadFn, this);
       if (r != 0) {
             return 1;
       }
+
       initialized_ = true;
       return 0;
 }
@@ -111,7 +137,9 @@ int TeletrafficRx::Init() {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const RxStatistics& TeletrafficRx::Stats() {
-      assert(initialized_ == true);
+
+      // Aunque no se haya inicializado permito que se lean las estadísticas (a cero).
+      //assert(initialized_ == true);
 
       // La estructura st está siendo constantemente actualizada por el hilo interno ThreadFn, para avitar condiciones
       // de carrera que den lugar la lecturas incorrectas de los valores por parte de aplicación garantizo la exlusión
@@ -170,7 +198,8 @@ void* TeletrafficRx::ThreadFn() {
 
                   st_.recv_packet_count++; // atomic operation on x86_64 --> lock-free
 
-                  st_.last_packet_protocol = *((uint16_t*) (pkt_recv_ + 12));
+                  //st_.last_packet_protocol = *((uint16_t*) (pkt_recv_ + 12)); // MAL
+                  st_.last_packet_protocol = ntohs(*((uint16_t*) (pkt_recv_ + 12)));
                   st_.last_packet_size = header_.len;
                   st_.last_packet_timestamp = header_.ts.tv_sec * 1e6 + header_.ts.tv_usec;
 
@@ -250,7 +279,6 @@ void* TeletrafficRx::ThreadFn() {
       }
 
       watch_.Stop();
-      pcap_close(rxdev_);
       return NULL;
 }
 
