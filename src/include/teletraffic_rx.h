@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <pcap/pcap.h>
 #include "stopwatch.h"
+#include "circular_buffer.h"
 
 namespace teletraffic {
 
@@ -19,12 +20,21 @@ namespace teletraffic {
             char source_mac[6];
       };
 
+
+      struct Window {
+            int packet_count;         // Number of packets arrived during this temporal window
+            int byte_count;           // Number of bytes arrived during this temporal window
+            int duration_us;          // Window duration is microseconds
+            double rate_Mbps;         // Bit rate in Mbps
+            double rate_pkps;         // Packets per second
+      };
+
       
       /**
        * Statistics about received packets.
        */
       struct RxStatistics {
-            RxStatistics() { 
+            RxStatistics() : window(60) { 
                   Reset(); 
             }
             void Reset() {
@@ -38,15 +48,18 @@ namespace teletraffic {
                   last_packet_size = 0;
                   last_packet_timestamp = 0;
             }
-
+            
+            CircularBuffer<Window> window;
+            
             // Network interface to sniff
             std::string interface;
-
+            
             // Protocol ID used to filter incoming packets (used in PCAP filter expresion eth proto %d)
             uint16_t packet_protocol_id;
-
+            
             // Data rate in packets/seconds calculated over a time window of 1 second
             double rate_1s_Mbps;
+
             // Data rate in Mbps calculated over a time window of 1 second
             double rate_1s_pkps;
             
@@ -57,6 +70,7 @@ namespace teletraffic {
 
             // Data rate in packets/seconds calculated over a time window of 8 seconds
             double rate_8s_Mbps;
+
             // Data rate in Mbps calculated over a time window of 8 seconds
             double rate_8s_pkps;
                         

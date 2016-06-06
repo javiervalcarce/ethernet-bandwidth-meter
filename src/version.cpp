@@ -8,9 +8,9 @@
 #define STR(x) STR_HELPER(x)
 
 #define TELETRAFFIC_VERSION_MAJOR 0
-#define TELETRAFFIC_VERSION_MINOR 4
-#define TELETRAFFIC_VERSION_MICRO 1
-#define TELETRAFFIC_PUBLICATION_DATE "May 6 2016"
+#define TELETRAFFIC_VERSION_MINOR 5
+#define TELETRAFFIC_VERSION_MICRO 0
+#define TELETRAFFIC_PUBLICATION_DATE "IPT"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int teletraffic::VersionMajor() {
