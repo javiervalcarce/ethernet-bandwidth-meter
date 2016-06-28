@@ -9,7 +9,6 @@
 #include "teletraffic_tx.h"
 #include "teletraffic_rx.h"
 
-
 using namespace teletraffic;
 
 std::string interface;
@@ -39,7 +38,7 @@ int RxMode();
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char** argv) {
-      
+
       if (argc < 4) {
             Usage();
             return 0;
@@ -51,14 +50,12 @@ int main(int argc, char** argv) {
       destination_mac = argv[4] != NULL ? argv[4] : "FF:FF:FF:FF:FF:FF";
       source_mac      = argv[5] != NULL ? argv[5] : "00:00:00:00:00:00";
 
-
       char* endp;
       protocol_id = strtoul(protocol_id_str.c_str(), &endp, 0);
       if (*endp != '\0') {
             printf("Bad syntax for protocol_id [%s]\n", protocol_id_str.c_str());
             return 1;
       }
-
       
       
       int err;
@@ -115,6 +112,7 @@ int TxMode() {
       }
 
       printf("Initialized.\n");
+      //tx->Start();
 
       while (1) {
             const TxStatistics& s = tx->Stats();                        
@@ -126,28 +124,41 @@ int TxMode() {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int RxMode() {
+      int i;
+      int n;
 
-      rx = new TeletrafficRx(interface, protocol_id);
+      rx = new TeletrafficRx(interface, protocol_id, 250000); // Ventanas de 0.25 segundos cada una
       if (rx->Init() != 0) {
             printf("Initializing error. Are you root? Execute this program as root or with sudo.\n");
             return 1;
       }
 
-      while (1) {
+      //rx->Start();
 
-            const RxStatistics& s = rx->Stats();                        
-            //printf("rx=%010llu, lost=%010llu 1s=%7.2f Mbps, 4s=%7.2f Mbps, 8s=%7.2f Mbps\n",
-            printf("rx=%010llu, 1s=%7.2f Mbps, 4s=%7.2f Mbps, 8s=%7.2f Mbps\n",
-                   s.recv_packet_count,
-                   //s.lost_packet_count,
-                   s.rate_1s_Mbps, 
-                   s.rate_4s_Mbps,
-                   s.rate_8s_Mbps
-                   );
+      while (1) {
             
-            usleep(500000); // 0.5 s
+            n = rx->WindowCount();
+            if (n > 30) {
+                  n = 30;
+            }
+            
+            for (i = 0; i < n; i++) {
+                  printf("window[%02d] = %7.2f Mbps  AccumulatedMean = %7.2f Mbps\n", i, 
+                         rx->RateMbpsAtWindow(i), 
+                         rx->RateMbpsOverLast(1 + i));
+            }
+            
+            usleep(250000); // 0.25 s
+
+            printf("\r");
+            for (i = 0; i < n; i++) {
+                  printf("\x1b[A");
+            }
+
       }
 
+      delete rx;
+      return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

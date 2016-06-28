@@ -5,6 +5,7 @@
 #include <cassert>
 #include <sstream>
 #include <string>
+#include <cmath>
 
 #include <arpa/inet.h>
 #include <pcap/pcap.h>
@@ -17,53 +18,44 @@
 using namespace teletraffic;
 
 const int PACKET_SIZE = 1024;
-static pthread_mutex_t s_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t s_lock = PTHREAD_MUTEX_INITIALIZER;  // mutex common for all class intances.
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-TeletrafficRx::TeletrafficRx(std::string interface, uint16_t protocol_id) {
-
+TeletrafficRx::TeletrafficRx(std::string interface, uint16_t protocol_id, uint64_t window_duration) {
       pthread_mutex_init(&lock_, NULL);
 
       st_.interface = interface;
       st_.packet_protocol_id = protocol_id;
+      window_duration_ = window_duration;
 
-      initialized_ = false;
-      exit_thread_ = false;
       rxdev_ = NULL;
       
       errbuf_ = new char[PCAP_ERRBUF_SIZE];
       errbuf_[0]='\0';
 
-      pthread_attr_init(&thread_attr_);
-      pthread_attr_setdetachstate(&thread_attr_, PTHREAD_CREATE_JOINABLE);    
+      st_.Reset();      
+
+      bytes_ = 0;
+      packets_ = 0;
+
+      watch_.Reset();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 TeletrafficRx::~TeletrafficRx() {
-
-      if (initialized_ == true) {
-            // El hilo de tx fue creado, le mandamos parar y esperamos su salida.
-            exit_thread_ = true;
-            pthread_join(thread_, NULL);
-      }
-
       if (rxdev_ != NULL) {
             pcap_close(rxdev_);
       }
    
       delete[] errbuf_;
-
-      initialized_ = false;
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-int TeletrafficRx::Init() {
-      assert(initialized_ == false);
-
-      bpf_u_int32 mask;		/* The netmask of our sniffing device */
-      bpf_u_int32 net;		/* The IP of our sniffing device */
-
+int TeletrafficRx::ServiceInit() {
+      bpf_u_int32 mask;		// The netmask of our sniffing device
+      bpf_u_int32 net;		// The IP of our sniffing device
 
       // La interfaz de red podía no estar activada (UP)
       char cmd[64];
@@ -103,15 +95,14 @@ int TeletrafficRx::Init() {
             return 1;
       }
 
-      struct bpf_program fp;		                /* The compiled filter expression */
-      //char filter_exp[] = "ether proto 65328";	    /* 0XFF30 The filter expression */
+      struct bpf_program fp;		                // The compiled filter expression
+      //char filter_exp[] = "ether proto 65328";    // 0XFF30 The filter expression
 
       char filter_exp[80];    
       snprintf(filter_exp, sizeof(filter_exp), "ether proto %d", st_.packet_protocol_id);
 
-      //
-      // Cuiado aquí: pcap_compile() **NO** es thread-safe por lo tanto debemos meterla en una región crítica.
-      //
+
+      // WARNING: pcap_compile() **IS NOT** thread-safe => mutex
       pthread_mutex_lock(&s_lock);
       if (pcap_compile(rxdev_, &fp, filter_exp, 0, net) == -1) {
             printf("TeletrafficRx: Couldn't parse filter %s: %s\n", filter_exp, pcap_geterr(rxdev_));
@@ -123,164 +114,113 @@ int TeletrafficRx::Init() {
             printf("TeletrafficRx: Couldn't install filter %s: %s\n", filter_exp, pcap_geterr(rxdev_));
             return 1;
       }
+     
 
-      int r;
-      r = pthread_create(&thread_, &thread_attr_, TeletrafficRx::ThreadFn, this);
-      if (r != 0) {
-            return 1;
-      }
-
-      initialized_ = true;
+      // auto start
+      watch_.Start();
+      ServiceThread::Start();
       return 0;
 }
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-const RxStatistics& TeletrafficRx::Stats() {
-
-      // Aunque no se haya inicializado permito que se lean las estadísticas (a cero).
-      //assert(initialized_ == true);
-
-      // La estructura st está siendo constantemente actualizada por el hilo interno ThreadFn, para avitar condiciones
-      // de carrera que den lugar la lecturas incorrectas de los valores por parte de aplicación garantizo la exlusión
-      // mutua y hago una copia de la variable, esto es razonablemente eficiente ya que no pesa mucho (~70 bytes)
-      pthread_mutex_lock(&lock_);
-      st_copy_ = st_;
-      pthread_mutex_unlock(&lock_);
-
-      return st_copy_;
-}
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void* TeletrafficRx::ThreadFn(void* obj) {
-      TeletrafficRx* o = (TeletrafficRx*) obj;
-      return o->ThreadFn();
-}
-void* TeletrafficRx::ThreadFn() {
-
-      watch_.Reset();
-      watch_.Start();
-      
-      uint32_t pkt_1s_count = 0;
-      uint32_t pkt_1s_bytes = 0;
-      uint64_t pkt_1s_elaps = 0;        
-
-      uint32_t pkt_4s_count = 0;
-      uint32_t pkt_4s_bytes = 0;
-      uint64_t pkt_4s_elaps = 0;
-
-      uint32_t pkt_8s_count = 0;
-      uint32_t pkt_8s_bytes = 0;
-      uint64_t pkt_8s_elaps = 0;
-      
+int TeletrafficRx::ServiceIteration() {
       uint64_t us;
-      int fsm = 0;
 
-      bool pkt_first = true;
-      uint64_t expected_seqno = 0;
+      // Sniff - Minimal blocking call
+      pkt_recv_ = (uint8_t*) pcap_next(rxdev_, &header_);            
 
-      st_.Reset();
+      if (pkt_recv_ == NULL) {
+            // Read Timeout!
+            // There is no packet... Nothing to do here.
+      } else {
 
-      while (1) {
+            pthread_mutex_lock(&lock_);
+            st_.recv_packet_count++; // atomic operation on x86_64 --> lock-free
 
-            if (exit_thread_ == true) {
-                  break;
-            }
-
-            // Sniff - Minimal blocking call
-            pkt_recv_ = (uint8_t*) pcap_next(rxdev_, &header_);            
-
-            if (pkt_recv_ == NULL) {
-                  // Read Timeout!
-                  // There is no packet
-            } else {
-
-                  st_.recv_packet_count++; // atomic operation on x86_64 --> lock-free
-
-                  //st_.last_packet_protocol = *((uint16_t*) (pkt_recv_ + 12)); // MAL
-                  st_.last_packet_protocol = ntohs(*((uint16_t*) (pkt_recv_ + 12)));
-                  st_.last_packet_size = header_.len;
-                  st_.last_packet_timestamp = header_.ts.tv_sec * 1e6 + header_.ts.tv_usec;
-
-                  uint64_t seqno = *((uint64_t*) (pkt_recv_ + 12 + 2 + 8));
-
-                  if (pkt_first == true) {
-                        pkt_first = false;
-                        // Sync with this number
-                        expected_seqno = seqno;
-                  } else {
-                        if (seqno != expected_seqno) {
-                              //printf("resync: rx %llu but should be %llu (delta %lld)\n", seqno, expected_seqno, seqno - expected_seqno);
-                              st_.lost_packet_count += seqno - expected_seqno;
-                              pkt_first = true;
-                        }
-                  }
-
-                  expected_seqno++; 
-                  
-                  pkt_1s_count++;
-                  pkt_4s_count++;
-                  pkt_8s_count++;
-                  
-                  pkt_1s_bytes += header_.len;
-                  pkt_4s_bytes += header_.len;
-                  pkt_8s_bytes += header_.len;
-            }
-
-
-
-            us = watch_.ElapsedMicroseconds();            
-            if (us > 1e6) {
-
-                  pkt_1s_elaps += us;        
-                  pkt_4s_elaps += us;        
-                  pkt_8s_elaps += us;        
-
-                  pthread_mutex_lock(&lock_);
-
-                  // Estimación de la tasa
-                  st_.rate_1s_pkps = (double) pkt_1s_count / ((double) pkt_1s_elaps / 1000000.0);
-                  st_.rate_1s_Mbps = (double) pkt_1s_bytes / ((double) pkt_1s_elaps / 1000000.0) * 8.0 / 1000.0 / 1000.0;
-
-                  pkt_1s_count = 0;
-                  pkt_1s_bytes = 0;
-                  pkt_1s_elaps = 0;
-
-                  switch (fsm) {
-                  case 0: fsm = 1; break;
-                  case 1: fsm = 2; break; 
-                  case 2: fsm = 3; break; 
-                  case 3: fsm = 4;
-                        st_.rate_4s_pkps = (double) pkt_4s_count / ((double) pkt_4s_elaps / 1000000.0);
-                        st_.rate_4s_Mbps = (double) pkt_4s_bytes / ((double) pkt_4s_elaps / 1000000.0) * 8.0 / 1000.0 / 1000.0;
-                        
-                        pkt_4s_count = 0;
-                        pkt_4s_bytes = 0;
-                        pkt_4s_elaps = 0;
-                        break;
-                  case 4: fsm = 5; break;
-                  case 5: fsm = 6; break;
-                  case 6: fsm = 7; break;
-                  case 7: fsm = 0;
-                        st_.rate_8s_pkps = (double) pkt_8s_count / ((double) pkt_8s_elaps / 1000000.0);
-                        st_.rate_8s_Mbps = (double) pkt_8s_bytes / ((double) pkt_8s_elaps / 1000000.0) * 8.0 / 1000.0 / 1000.0;
-                        
-                        pkt_8s_count = 0;
-                        pkt_8s_bytes = 0;
-                        pkt_8s_elaps = 0;
-                        break;
-                  };
-                  
-                  pthread_mutex_unlock(&lock_);
-
-                  watch_.Reset();
-            } 
+            //st_.last_packet_protocol = *((uint16_t*) (pkt_recv_ + 12)); // MAL
+            st_.last_packet_protocol = ntohs(*((uint16_t*) (pkt_recv_ + 12)));
+            st_.last_packet_size = header_.len;
+            st_.last_packet_timestamp = header_.ts.tv_sec * 1e6 + header_.ts.tv_usec;
+            
+            packets_ += 1;
+            bytes_ += header_.len;
+            pthread_mutex_unlock(&lock_);
       }
 
-      watch_.Stop();
-      return NULL;
+      us = watch_.ElapsedMicroseconds();            
+      if (us > window_duration_) {
+
+            // Un nuevo elemento en la cola, si el número de elementos superase los 60 se sobreescribe el más
+            // antiguo (vea la documentación de CircularBuffer<T>)
+            Window w;
+                  
+            w.bytes     = bytes_;
+            w.packets   = packets_;
+            w.duration  = us;        
+            w.rate_pps  = (float) w.packets / ((float) w.duration / 1000000.0F);
+            w.rate_Mbps = (float) w.bytes   / ((float) w.duration / 1000000.0F) * 8.0F / 1000.0F / 1000.0F;
+
+            pthread_mutex_lock(&lock_);
+            st_.window.Push(w);
+            pthread_mutex_unlock(&lock_);
+
+            bytes_ = 0;
+            packets_ = 0;
+            watch_.Reset();
+      } 
+
+      return 0; // Call this function imediately (after 0 us)
 }
 
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+float TeletrafficRx::RateMbpsAtWindow(int second_index) {
+      //assert(initialized_ == true);
+      float v;
+      pthread_mutex_lock(&lock_);
+      if (second_index < st_.window.Size()) {
+            v = st_.window[second_index].rate_Mbps;
+      } else {
+            v = nan("");
+      }
+
+      pthread_mutex_unlock(&lock_);
+      return v;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+float TeletrafficRx::RateMbpsOverLast(int number_of_windows) {
+      //assert(initialized_ == true);
+      assert(number_of_windows > 0);
+
+      int i;
+      int n;
+      float v;
+
+      n = number_of_windows;
+      v = 0.0F;
+      pthread_mutex_lock(&lock_);
+      if (n <= st_.window.Size()) {
+            for (i = 0; i < n; i++) {
+                  v += st_.window[i].rate_Mbps;
+            }
+      } else {
+            v = nan("");
+      }
+      pthread_mutex_unlock(&lock_);
+
+      return v / n;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int TeletrafficRx::WindowCount() {
+      int n;
+      pthread_mutex_lock(&lock_);
+      n = st_.window.Size();
+      pthread_mutex_unlock(&lock_);
+      return n;
+}
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

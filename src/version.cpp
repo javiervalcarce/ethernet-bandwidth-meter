@@ -10,7 +10,7 @@
 #define TELETRAFFIC_VERSION_MAJOR 0
 #define TELETRAFFIC_VERSION_MINOR 5
 #define TELETRAFFIC_VERSION_MICRO 0
-#define TELETRAFFIC_PUBLICATION_DATE "IPT"
+#define TELETRAFFIC_PUBLICATION_DATE "Jun 21 2016"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int teletraffic::VersionMajor() {
@@ -35,15 +35,17 @@ const char* teletraffic::VersionString() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool teletraffic::VersionCheck(int major, int minor, int micro) {
       if (major != TELETRAFFIC_VERSION_MAJOR) {
+            // Es una rama distinta, no es compatible
             return false;
       }
-
-      if (minor < TELETRAFFIC_VERSION_MINOR) {
+      if (minor > TELETRAFFIC_VERSION_MINOR) {
+            // El número minor mínimo exigido es mayor que la de esta biblioteca
             return false;
-      }     
-
-      if (micro < TELETRAFFIC_VERSION_MICRO) {
-            return false;
+      } else if (minor == TELETRAFFIC_VERSION_MINOR) {
+            if (micro > TELETRAFFIC_VERSION_MICRO) {
+                  // El número micro mínimo exigido es mayor que la de esta biblioteca (dentro de la rama major.minor)
+                  return false;
+            }
       }
       return true;
 }

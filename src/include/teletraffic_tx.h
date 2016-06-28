@@ -7,6 +7,7 @@
 #include <string>
 #include "stopwatch.h"
 #include "utils.h"
+#include "service_thread.h"
 
 
 namespace teletraffic {
@@ -46,37 +47,32 @@ namespace teletraffic {
             }
             void Reset() {
                   sent_packet_count = 0;
-                  rate_1s_Mbps = 0.0;
-                  rate_1s_pkps = 0.0;
-                  rate_4s_Mbps = 0.0;
-                  rate_4s_pkps = 0.0;
-                  rate_8s_Mbps = 0.0;
-                  rate_8s_pkps = 0.0;
+
+                  // rate_1s_Mbps = 0.0;
+                  // rate_1s_pkps = 0.0;
+                  // rate_4s_Mbps = 0.0;
+                  // rate_4s_pkps = 0.0;
+                  // rate_8s_Mbps = 0.0;
+                  // rate_8s_pkps = 0.0;
             }
 
             // Number of packets sent
             uint64_t sent_packet_count;
 
-            double rate_1s_Mbps;
-            double rate_1s_pkps;
-            double rate_4s_Mbps;
-            double rate_4s_pkps;
-            
-            // Data rate in Mbps calculated over a time window of 8 seconds
-            double rate_8s_Mbps;
-
-            // Data rate in packets/seconds calculated over a time window of 8 seconds            
-            double rate_8s_pkps;
+            // double rate_1s_Mbps;
+            // double rate_1s_pkps;
+            // double rate_4s_Mbps;
+            // double rate_4s_pkps;
+            // double rate_8s_Mbps;
+            // double rate_8s_pkps;
       };
       
       
       /**
        * Teletraffic transmitter.
        */
-      class TeletrafficTx {
+      class TeletrafficTx : public ServiceThread {
       public:
-
-      
             /**
              * Constructor.
              * 
@@ -100,39 +96,33 @@ namespace teletraffic {
             ~TeletrafficTx();
 
             /**
-             * Initialization.
-             */
-            int Init();
-
-            /**
              * Returns a reference to a data struct which contains statistics about the transmitter.
              */
             const TxStatistics& Stats();      
       
       private:
-
             FlowSource source_;
-
             pthread_mutex_t lock_;
             pcap_t* txdev_;
             char* errbuf_;
             char* pkt_sent_;
             Stopwatch watch_;
 
-            pthread_t thread_;
-            pthread_attr_t thread_attr_;
-            bool initialized_;
-            bool thread_exit_;
+            // todo: _
+            char* payload;
+            uint64_t* pkt_count_p;
+            uint64_t  error_count;
+            uint64_t  pkt_count;
+
 
             TxStatistics st_;
             TxStatistics st_copy_;
 
-            static
-            void* ThreadFn(void* obj);
-            void* ThreadFn();
+            // Base class overrides
+            int ServiceInit();
+            int ServiceIteration();
       };
-
 }
 
-#endif // TELETRAFFIC_TELETRAFFIC_TX_
+#endif  // TELETRAFFIC_TELETRAFFIC_TX_
 
