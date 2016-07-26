@@ -68,8 +68,10 @@ int Slip::Send(uint8_t* p, int  len) {
        */
       send_char(END);
       
-      
+      return 0;
 }
+
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /* RECV_PACKET: receives a packet into the buffer located at "p".
@@ -77,7 +79,6 @@ int Slip::Send(uint8_t* p, int  len) {
  *      be truncated.
  *      Returns the number of bytes stored in the buffer.
  */
-
 int Slip::Recv(uint8_t* p, int len) {
       
       uint8_t c;
@@ -92,7 +93,7 @@ int Slip::Recv(uint8_t* p, int len) {
       while(1) {
             /* get a character to process
              */
-            c = recv_char();
+            recv_char(&c);
 
             /* handle bytestuffing if necessary
              */
@@ -119,7 +120,7 @@ int Slip::Recv(uint8_t* p, int len) {
                    * what to store in the packet based on that.
                    */
             case ESC:
-                  c = recv_char();
+                  recv_char(&c);
 
                   /* if "c" is not one of these two, then we
                    * have a protocol violation.  The best bet
@@ -143,19 +144,32 @@ int Slip::Recv(uint8_t* p, int len) {
                         p[received++] = c;
             }
       }
+
+      return 0;
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-int Slip::send_char(char c) {
-      write(fd_, &c, 1);      
+int Slip::send_char(uint8_t  c) {
+      int n;
+      n = write(fd_, &c, 1);
+      if (n != 1) {
+            return 1;
+      }
+      return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-int Slip::recv_char() {
+int Slip::recv_char(uint8_t* c) {
+      int n;
       uint8_t buff[1];
-      read(fd_, buff, 1);
-      return buff[0];
+      n = read(fd_, buff, 1);
+      *c = buff[0];
+      if (n != 1) {
+            return 1;
+      }
+
+      return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

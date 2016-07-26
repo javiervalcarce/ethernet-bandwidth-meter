@@ -1,4 +1,5 @@
 // Hi Emacs, this is -*- coding: utf-8; mode: c++; tab-width: 6; indent-tabs-mode: nil; c-basic-offset: 6 -*-
+
 #include "teletraffic_tx.h"
 #include <unistd.h>
 #include <cstdlib>
@@ -16,16 +17,16 @@
 
 using namespace teletraffic;
 
-const int PACKET_SIZE = 1024;
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-TeletrafficTx::TeletrafficTx(std::string interface, uint16_t protocol_id, uint8_t* destination_mac, uint8_t* source_mac) {
+TeletrafficTx::TeletrafficTx(std::string interface, uint16_t protocol_id, uint8_t* destination_mac, uint8_t* source_mac) 
+      : ServiceThread("TTX-" + interface) {
+
       pthread_mutex_init(&lock_, NULL);
       source_.interface = interface;
 
       source_.packet_protocol_id = protocol_id;
       source_.speed_bytes_per_second = 0; // TODO: Implementar esto.
-      source_.packet_size = PACKET_SIZE;
+      source_.packet_size = kPacketSize;
       
       //printf("Using interface %s\n", interface.c_str());
 
@@ -34,11 +35,11 @@ TeletrafficTx::TeletrafficTx(std::string interface, uint16_t protocol_id, uint8_
       if (source_mac != NULL) {
             memcpy(source_.source_mac, source_mac, 6);
       } else {
-            // 20160506 JVG: Obtengo la MAC de la interfaz [interface] y uso esa
 
-            std::map<std::string, NetworkInterface> table;
+            // 20160506 JVG: Obtengo la MAC de la interfaz [interface] y uso esa
+            NetworkInterfaceTable table;
             NetworkInterfaceTableUpdate();
-            NetworkInterfaceTable(&table);
+            NetworkInterfaceTableCopy(&table);
 
             if (table.find(interface) != table.end()) {
                   memcpy(source_.source_mac, table.at(interface).mac_address, 6);
@@ -72,19 +73,29 @@ TeletrafficTx::TeletrafficTx(std::string interface, uint16_t protocol_id, uint8_
       pkt_sent_ = new char[source_.packet_size];
 }
 
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 TeletrafficTx::~TeletrafficTx() {
-      if (txdev_ != NULL) {
-            pcap_close(txdev_);
-      }
-
-      delete[] errbuf_;
-      delete[] pkt_sent_;
+      // NO ESCRIBIR NADA AQUÍ SALVO LLAMAR A Finalize() en la clase base. La liberación de recursos debe hacerse en
+      // ServiceFinalize() y no aquí. Este destructor se ejecuta en un hilo DIFERENTE al del servicio.
+      ServiceThread::Finalize();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-int TeletrafficTx::ServiceInit() {  // override
+int TeletrafficTx::ServiceInitialize() {  // override
       // ONE-TIME INITIALIZATION
+
+      // First of all, check the existence of the specified network interface
+      NetworkInterfaceTable table;
+      NetworkInterfaceTableUpdate();
+      NetworkInterfaceTableCopy(&table);
+
+      if (table.find(source_.interface) == table.end()) {
+            // The source network interface does not exist
+            return 1;
+      }
+      
+
       char cmd[64];
       snprintf(cmd, sizeof(cmd), "ifconfig %s up", source_.interface.c_str());
       if (system(cmd) != 0) {
@@ -146,8 +157,18 @@ int TeletrafficTx::ServiceInit() {  // override
       watch_.Reset();
       watch_.Start();
 
-      // auto start
-      ServiceThread::Start();
+      return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int TeletrafficTx::ServiceStart() {
+      //printf("TeletrafficTx::ServiceStart()\n");
+      return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int TeletrafficTx::ServiceStop() {
+      //printf("TeletrafficTx::ServiceStopt()\n");
       return 0;
 }
       
@@ -172,6 +193,19 @@ int TeletrafficTx::ServiceIteration() {  // override
       pthread_mutex_unlock(&lock_);           
 
       return 0; // Call this function again inmediately (0 microseconds)
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int TeletrafficTx::ServiceFinalize() {
+      //printf("TeletrafficTx::ServiceFinalize()\n");
+      if (txdev_ != NULL) {
+            pcap_close(txdev_);
+      }
+      
+      delete[] errbuf_;
+      delete[] pkt_sent_;
+
+      return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

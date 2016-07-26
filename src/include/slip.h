@@ -16,8 +16,8 @@ namespace teletraffic {
 
       private:
             int fd_;
-            int send_char(char c);
-            int recv_char();
+            int send_char(uint8_t  c);
+            int recv_char(uint8_t* c);
       };
 }
 

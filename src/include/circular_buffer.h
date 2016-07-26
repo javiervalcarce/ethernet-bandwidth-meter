@@ -20,7 +20,6 @@ template <class T>
 class CircularBuffer
 {        
       T*              m_buffer;
-      //int             m_first;
       int             m_next;
       int             m_count;
       int             m_capacity;
@@ -41,10 +40,10 @@ public:
       void Clear();
 
       /** Número de elementos actualmente en cola */
-      int  Size();
+      int  Size() const;
 
       /** Capacidad de la cola (número máximo de elementos que puede albergar) */
-      int  Capacity();
+      int  Capacity() const;
       
       /** operador [], [0] es el último elemento introducido, [1] es el penúltimo, [2] es el antepenúltimo, etc */
       T& operator[](int idx);
@@ -81,12 +80,12 @@ template<class T> void CircularBuffer<T>::Clear() {
 }              
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-template<class T> int CircularBuffer<T>::Size() {
+template<class T> int CircularBuffer<T>::Size() const {
       return m_count;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-template<class T> int CircularBuffer<T>::Capacity() {
+template<class T> int CircularBuffer<T>::Capacity() const {
       return m_capacity;
 }
 

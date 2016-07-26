@@ -2,56 +2,111 @@
 #ifndef TELETRAFFIC_SERVICE_THREAD_H_
 #define TELETRAFFIC_SERVICE_THREAD_H_
 #include <pthread.h>
+#include <string>
 
 namespace teletraffic {
 
       /**
-       * Base class.
+       * ServiceThread Abstract Base Class.
        *
-       * Continuosly calls its Worker function defined in a derived class and lets you start(), stop() the execution of
+       * Continously calls its Worker function defined in a derived class and lets you start(), stop() the execution of
        * that function and query its execution state. It is a concept similar to a OS Service on Microsoft Windows
        * Operating Systems and a useful abstraction in multitude of contexts.
        */
       class ServiceThread {
       public:
 
-            enum InternalState {
-                  // Aun no se ha llamado a Init(), hasta que no llame a Init() no podra ponerlo en marcha con Start().
-                  kNotInitialized,
-                  // Parado. Puede ponerlo en marcha con Start().
-                  kStopped,
-                  // En marcha. Puede pararlo con Stop().
-                  kRunning,
-                  // Error fatal, el analizador esta parado, el hilo ha terminado, destruya el objeto (con delete) y 
-                  // vuelva a instanciarlo.
-                  kCrashed,
-                  kFinished,
-            };
+            /**
+             * Ctor.
+             * @param thread_name The name of service thread, this name will show in a GDB session typing "info
+             * threads" command.
+             */
+            ServiceThread(std::string thread_name = "");
 
-
-            ServiceThread();
+            /**
+             * Dtor.
+             */
             virtual ~ServiceThread();
-            int Init();
-            
+
+
+            int Init();            
             int Start();
             int Stop();
 
       protected:
-            virtual int ServiceInit();       // One-time (heavy) initialization. Free resource in ~Destructor of the derived class
 
-            virtual int ServiceStart();      // Service is about to start (again)
-            virtual int ServiceIteration();  // Service work, returned value is the number of microseconds to wait before call ServiceIteration() again.
-            virtual int ServiceStop();       // Service is about to stop (again)
+            int Finalize();
+
+
+            // One-time (heavy) initialization. Free the adquired resources at ServiceFinalize().
+            // DO NOT USE DERIVED CLASS DESTRUCTOR FOR THAT PURPOSE.
+            virtual int ServiceInitialize() =0;
+
+            // Service is about to start, called always after a Start()
+            virtual int ServiceStart() =0;
+
+            // Service work, returned value is the number of microseconds to wait before call ServiceIteration()
+            // again. If a negative number is returned then thread will be finished and status is kCrashed.
+            virtual int ServiceIteration() =0;
+
+            // Service is about to stop, called always after a Stop()
+            virtual int ServiceStop() =0;
+
+            // Service is about to be killed, any resource adquired in ServiceInit() should be freed here
+            virtual int ServiceFinalize() =0;
+
 
       private:
+
+            // State of the service thread.
+            enum InternalState {
+
+                  // Service thread is not yet created.
+                  kNull = 0,
+
+                  // An error happened during ServiceInitialization()
+                  kCrashed,
+
+                  // Not initialized yet. Call Init()
+                  kNotInitialized,
+
+                  // The ServiceInitialize() function is being called
+                  kInitializing,
+
+                  // The ServiceStop() function is being called
+                  kStopping,
+
+                  // Stopped, start it again with Start().
+                  kStopped,
+
+                  // The ServiceStart() function is being called
+                  kStarting,
+
+                  // Service is running, stop it again with Stop().
+                  kStarted,
+
+                  // The ServiceFinalize() function is being called
+                  kFinalizing,
+
+                  // Finished normally, this state is unrecoverable.
+                  kFinalized
+            };
+
+            static const int kIdleSleep = 1000; // 1000 us = 1 ms
+
             pthread_t thread_;
             pthread_attr_t thread_attr_;
-            pthread_mutex_t lock_;
-            pthread_cond_t can_continue_;  
 
-            bool initialized_;
-            bool exit_thread_;
+            pthread_mutex_t lock_;
+            std::string thread_name_;
+            bool thread_exit_;
+
             InternalState internal_state_;
+
+            volatile bool cmd_initialize_;
+            volatile bool cmd_start_;
+            volatile bool cmd_stop_;
+            volatile bool cmd_finalize_;
 
             static 
             void* ThreadFn(void* obj);

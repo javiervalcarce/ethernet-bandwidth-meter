@@ -3,6 +3,7 @@
 #define TELETRAFFIC_TELETRAFFIC_RX_
 
 #include <string>
+#include <set>
 #include <pthread.h>
 #include <pcap/pcap.h>
 #include "stopwatch.h"
@@ -117,18 +118,15 @@ namespace teletraffic {
                   uint64_t last_packet_timestamp;
             };
 
-            pthread_mutex_t lock_;
 
-            uint64_t  window_duration_;
-            
+
+            pthread_mutex_t lock_;
+            uint64_t window_duration_;
             pcap_t* rxdev_;
             std::string last_error_;
-
             Stopwatch watch_;
             uint64_t bytes_;
             uint64_t packets_;
-
-            
 
             RxStatistics st_;
             
@@ -138,9 +136,20 @@ namespace teletraffic {
 
             char* errbuf_;
 
+            static const int kPacketSize;
+            // mutex common for all class intances.
+            static pthread_mutex_t       common_lock_;    
+            // table of interfaces being sniffed by TeletrafficRX objects
+            //static std::set<std::string> interfaces_being_sniffed_;
+
+
             // Base class overrides
-            int ServiceInit();
+            int ServiceInitialize();
+            int ServiceStart();
+            int ServiceStop();
             int ServiceIteration();
+            int ServiceFinalize();
+
       };
       
 }

@@ -2,6 +2,7 @@
 #ifndef TELETRAFFIC_TELETRAFFIC_TX_
 #define TELETRAFFIC_TELETRAFFIC_TX_
 
+
 #include <pthread.h>
 #include <pcap/pcap.h>
 #include <string>
@@ -38,6 +39,7 @@ namespace teletraffic {
       };
       
 
+
       /**
        * Transmitter statistics.
        */
@@ -47,29 +49,22 @@ namespace teletraffic {
             }
             void Reset() {
                   sent_packet_count = 0;
-
-                  // rate_1s_Mbps = 0.0;
-                  // rate_1s_pkps = 0.0;
-                  // rate_4s_Mbps = 0.0;
-                  // rate_4s_pkps = 0.0;
-                  // rate_8s_Mbps = 0.0;
-                  // rate_8s_pkps = 0.0;
             }
 
             // Number of packets sent
             uint64_t sent_packet_count;
-
-            // double rate_1s_Mbps;
-            // double rate_1s_pkps;
-            // double rate_4s_Mbps;
-            // double rate_4s_pkps;
-            // double rate_8s_Mbps;
-            // double rate_8s_pkps;
       };
       
       
       /**
        * Teletraffic transmitter.
+       *
+       * This class represent a transmitter that sends raw ethernet (layer 2) packets at maximum speed using PCAP
+       * library. Its main purpose is to send a labeled traffic flow that can be measured at the receiver end to
+       * estimate network bandwidth.
+       * 
+       * Pcap library uses a special capture mechanism placed at kernel that let us send and receive (sniff) packet at
+       * maximun speed. It's possible to measure with acuracy up to 10 Gbps links depending on the machine speed.
        */
       class TeletrafficTx : public ServiceThread {
       public:
@@ -101,6 +96,9 @@ namespace teletraffic {
             const TxStatistics& Stats();      
       
       private:
+
+            static const int kPacketSize = 1024;
+
             FlowSource source_;
             pthread_mutex_t lock_;
             pcap_t* txdev_;
@@ -114,15 +112,19 @@ namespace teletraffic {
             uint64_t  error_count;
             uint64_t  pkt_count;
 
-
             TxStatistics st_;
             TxStatistics st_copy_;
 
             // Base class overrides
-            int ServiceInit();
+            int ServiceInitialize();
+            int ServiceStart();
+            int ServiceStop();
             int ServiceIteration();
+            int ServiceFinalize();
+            
       };
 }
 
-#endif  // TELETRAFFIC_TELETRAFFIC_TX_
+
+#endif   // TELETRAFFIC_TELETRAFFIC_TX_
 

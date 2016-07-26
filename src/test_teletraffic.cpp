@@ -112,7 +112,7 @@ int TxMode() {
       }
 
       printf("Initialized.\n");
-      //tx->Start();
+      tx->Start();
 
       while (1) {
             const TxStatistics& s = tx->Stats();                        
@@ -133,13 +133,14 @@ int RxMode() {
             return 1;
       }
 
-      //rx->Start();
+      rx->Start();
 
       while (1) {
             
             n = rx->WindowCount();
-            if (n > 30) {
-                  n = 30;
+            if (n > 16) {
+                  // Límito la impresión por pantalla de la tasa recibida a los 16 últimos segundos.
+                  n = 16;
             }
             
             for (i = 0; i < n; i++) {
@@ -154,7 +155,6 @@ int RxMode() {
             for (i = 0; i < n; i++) {
                   printf("\x1b[A");
             }
-
       }
 
       delete rx;
